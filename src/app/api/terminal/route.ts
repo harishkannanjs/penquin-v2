@@ -20,14 +20,14 @@ export async function POST(request: NextRequest) {
           stdio: 'inherit'
         }).on('close', () => {
           
-          const installProcess = spawn('sudo', ['bash', scriptPath], {
+          const installProcess = spawn('bash', [scriptPath], {
             stdio: ['pipe', 'pipe', 'pipe'],
             env: { 
               ...process.env, 
-              PATH: `${process.env.PATH}:/root/go/bin:/usr/local/go/bin`,
-              GOPATH: '/root/go',
+              PATH: `${process.env.PATH}:/home/runner/tools/bin:/home/runner/go/bin:/usr/local/go/bin`,
+              GOPATH: '/home/runner/go',
               GOROOT: '/usr/local/go',
-              HOME: '/root'
+              HOME: '/home/runner'
             }
           });
 
@@ -69,10 +69,10 @@ export async function POST(request: NextRequest) {
       // Set environment with Go path and other essential paths
       const env = {
         ...process.env,
-        PATH: `${process.env.PATH}:/root/go/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin`,
-        GOPATH: '/root/go',
+        PATH: `${process.env.PATH}:/home/runner/tools/bin:/home/runner/go/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin`,
+        GOPATH: '/home/runner/go',
         GOROOT: '/usr/local/go',
-        HOME: '/root',
+        HOME: '/home/runner',
         USER: 'root'
       };
 

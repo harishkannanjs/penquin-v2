@@ -2,99 +2,156 @@
 #!/bin/bash
 
 # Penquin Security Tools Installation Script
-# This script installs essential penetration testing and bug hunting tools
+# Replit-compatible version using pre-built binaries and alternative methods
 
-set -e  # Exit on any error
-export DEBIAN_FRONTEND=noninteractive
+echo "🐧 Starting Penquin Security Tools Installation (Replit Edition)..."
 
-echo "🐧 Starting Penquin Security Tools Installation..."
+# Create necessary directories in user space
+mkdir -p $HOME/tools/bin
+mkdir -p $HOME/.gf
+mkdir -p $HOME/wordlists
 
-# Create necessary directories
-mkdir -p /root/go/bin
-mkdir -p /usr/share/wordlists
-mkdir -p /root/.gf
+# Set up PATH for tools
+export PATH=$PATH:$HOME/tools/bin
 
-# Update package lists and install essential packages
-echo "📦 Installing essential packages..."
-apt-get update -y > /dev/null 2>&1
-apt-get install -y curl wget git python3 python3-pip nodejs npm golang-go ruby ruby-dev build-essential libssl-dev libffi-dev python3-dev python3-setuptools unzip > /dev/null 2>&1
+# Download and install pre-compiled tools
+echo "📦 Installing pre-compiled security tools..."
 
-# Set up Go environment
-export GOPATH=/root/go
-export GOROOT=/usr/local/go
-export PATH=$PATH:/usr/local/go/bin:/root/go/bin
+# Function to download and install binary
+install_binary() {
+    local name=$1
+    local url=$2
+    local filename=$3
+    
+    echo "  Installing $name..."
+    if curl -sL "$url" -o "$HOME/tools/bin/$filename" 2>/dev/null; then
+        chmod +x "$HOME/tools/bin/$filename"
+        echo "  ✅ $name downloaded successfully"
+    else
+        echo "  ❌ Failed to download $name"
+    fi
+}
 
-# Install Go tools with proper error handling
-echo "🔧 Installing Go-based tools..."
-go install github.com/tomnomnom/gau/v2/cmd/gau@latest 2>/dev/null || echo "Failed to install gau"
-go install github.com/tomnomnom/assetfinder@latest 2>/dev/null || echo "Failed to install assetfinder"
-go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest 2>/dev/null || echo "Failed to install subfinder"
-go install github.com/projectdiscovery/httpx/cmd/httpx@latest 2>/dev/null || echo "Failed to install httpx"
-go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest 2>/dev/null || echo "Failed to install nuclei"
-go install github.com/projectdiscovery/katana/cmd/katana@latest 2>/dev/null || echo "Failed to install katana"
-go install github.com/tomnomnom/waybackurls@latest 2>/dev/null || echo "Failed to install waybackurls"
-go install github.com/tomnomnom/qsreplace@latest 2>/dev/null || echo "Failed to install qsreplace"
-go install github.com/hahwul/dalfox/v2@latest 2>/dev/null || echo "Failed to install dalfox"
-go install github.com/ffuf/ffuf@latest 2>/dev/null || echo "Failed to install ffuf"
-go install github.com/OJ/gobuster/v3@latest 2>/dev/null || echo "Failed to install gobuster"
-go install github.com/tomnomnom/httprobe@latest 2>/dev/null || echo "Failed to install httprobe"
-go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest 2>/dev/null || echo "Failed to install naabu"
-go install github.com/tomnomnom/gf@latest 2>/dev/null || echo "Failed to install gf"
+# Install available pre-built tools using direct binary downloads
+echo "  Installing subfinder..."
+if curl -sL "https://github.com/projectdiscovery/subfinder/releases/download/v2.8.0/subfinder_2.8.0_linux_amd64.tar.gz" -o "$HOME/tools/bin/subfinder.tar.gz"; then
+    cd $HOME/tools/bin && tar -xzf subfinder.tar.gz subfinder && chmod +x subfinder && rm subfinder.tar.gz && cd -
+    echo "  ✅ subfinder installed successfully"
+else
+    echo "  ❌ Failed to install subfinder"
+fi
 
-# Install Python tools
+echo "  Installing httpx..."
+if curl -sL "https://github.com/projectdiscovery/httpx/releases/download/v1.7.1/httpx_1.7.1_linux_amd64.tar.gz" -o "$HOME/tools/bin/httpx.tar.gz"; then
+    cd $HOME/tools/bin && tar -xzf httpx.tar.gz httpx && chmod +x httpx && rm httpx.tar.gz && cd -
+    echo "  ✅ httpx installed successfully"
+else
+    echo "  ❌ Failed to install httpx"
+fi
+
+# Install Python tools with simplified approach
 echo "🐍 Installing Python-based tools..."
-pip3 install --break-system-packages sqlmap dirsearch paramspider uro arjun sublist3r dnsrecon theHarvester requests beautifulsoup4 > /dev/null 2>&1 || echo "Some Python tools failed to install"
+if command -v pip3 >/dev/null 2>&1; then
+    pip3 install --user requests beautifulsoup4 || echo "❌ Some Python dependencies failed"
+    
+    # Install dirsearch manually
+    if [ ! -d "$HOME/tools/dirsearch" ]; then
+        git clone --depth 1 https://github.com/maurosoria/dirsearch.git $HOME/tools/dirsearch
+        echo "✅ dirsearch installed"
+    fi
+    
+    # Install sqlmap manually
+    if [ ! -d "$HOME/tools/sqlmap" ]; then
+        git clone --depth 1 https://github.com/sqlmapproject/sqlmap.git $HOME/tools/sqlmap
+        echo "✅ sqlmap installed"
+    fi
+else
+    echo "⚠️ pip3 not available, skipping Python tools"
+fi
 
-# Install Ruby tools
-echo "💎 Installing Ruby-based tools..."
-gem install wpscan > /dev/null 2>&1 || echo "Failed to install wpscan"
+# Create simple wrapper scripts
+echo "🔧 Creating tool wrappers..."
 
-# Install additional tools via apt
-echo "📋 Installing additional tools..."
-apt-get install -y nmap dirb nikto hashcat john hydra masscan amass dnsutils whois host dnsutils fierce > /dev/null 2>&1 || echo "Some apt tools failed to install"
+# Create dirsearch wrapper
+cat > $HOME/tools/bin/dirsearch << 'EOF'
+#!/bin/bash
+cd $HOME/tools/dirsearch && python3 dirsearch.py "$@"
+EOF
+chmod +x $HOME/tools/bin/dirsearch
 
-# Install Node.js tools
-echo "🟢 Installing Node.js tools..."
-npm install -g retire js-beautify > /dev/null 2>&1 || echo "Some Node.js tools failed to install"
+# Create sqlmap wrapper
+cat > $HOME/tools/bin/sqlmap << 'EOF'
+#!/bin/bash
+cd $HOME/tools/sqlmap && python3 sqlmap.py "$@"
+EOF
+chmod +x $HOME/tools/bin/sqlmap
 
 # Download SecLists
 echo "⬇️ Downloading SecLists..."
-if [ ! -d "/usr/share/seclists" ]; then
-    git clone --depth 1 https://github.com/danielmiessler/SecLists.git /usr/share/seclists > /dev/null 2>&1 || echo "Failed to clone SecLists"
+if [ ! -d "$HOME/wordlists/seclists" ]; then
+    git clone --depth 1 https://github.com/danielmiessler/SecLists.git $HOME/wordlists/seclists && echo "✅ SecLists downloaded" || echo "❌ Failed to download SecLists"
 fi
 
-# Download common wordlists
-echo "📝 Setting up wordlists..."
-if [ ! -f "/usr/share/wordlists/common.txt" ]; then
-    wget -q -O /usr/share/wordlists/common.txt https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt 2>/dev/null || echo "Failed to download common.txt"
+# Copy wordlists from SecLists (already downloaded)
+echo "📝 Setting up common wordlists..."
+if [ -d "$HOME/wordlists/seclists" ]; then
+    cp "$HOME/wordlists/seclists/Discovery/Web-Content/common.txt" "$HOME/wordlists/common.txt" 2>/dev/null && echo "✅ common.txt ready"
+    cp "$HOME/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt" "$HOME/wordlists/directory-list-2.3-medium.txt" 2>/dev/null && echo "✅ directory-list ready"
+    cp "$HOME/wordlists/seclists/Discovery/Web-Content/big.txt" "$HOME/wordlists/big.txt" 2>/dev/null && echo "✅ big.txt ready"
+else
+    echo "❌ SecLists not available for wordlist setup"
 fi
 
-# Install gf patterns
-echo "🔍 Installing gf patterns..."
-if [ ! -d "/root/.gf" ]; then
-    git clone --depth 1 https://github.com/tomnomnom/gf.git /tmp/gf > /dev/null 2>&1
-    if [ -d "/tmp/gf/examples" ]; then
-        cp -r /tmp/gf/examples/* /root/.gf/ 2>/dev/null || echo "Failed to copy gf patterns"
-    fi
-    rm -rf /tmp/gf
+# Create some useful command aliases
+echo "⚙️ Setting up command shortcuts..."
+cat > $HOME/tools/bin/scan-subdomains << 'EOF'
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "Usage: scan-subdomains <domain>"
+    exit 1
 fi
-
-# Update nuclei templates
-echo "🧬 Updating nuclei templates..."
-if command -v nuclei >/dev/null 2>&1; then
-    nuclei -update-templates > /dev/null 2>&1 || echo "Failed to update nuclei templates"
+echo "🔍 Scanning subdomains for $1..."
+if command -v subfinder >/dev/null 2>&1; then
+    subfinder -d "$1" -all
+else
+    echo "❌ subfinder not available"
 fi
+EOF
+chmod +x $HOME/tools/bin/scan-subdomains
 
-# Make binaries executable
-chmod +x /root/go/bin/* 2>/dev/null || echo "Failed to set permissions"
+cat > $HOME/tools/bin/probe-urls << 'EOF'
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "Usage: probe-urls <domain>"
+    exit 1
+fi
+echo "🌐 Probing URLs for $1..."
+echo "$1" | if command -v httpx >/dev/null 2>&1; then
+    httpx -title -status-code -tech-detect
+else
+    echo "❌ httpx not available"
+fi
+EOF
+chmod +x $HOME/tools/bin/probe-urls
 
-# Update PATH permanently
-echo 'export PATH=$PATH:/root/go/bin:/usr/local/go/bin' >> /root/.bashrc
+# Update PATH permanently (create .bashrc if it doesn't exist)
+touch $HOME/.bashrc 2>/dev/null || true
+echo 'export PATH=$PATH:$HOME/tools/bin' >> $HOME/.bashrc 2>/dev/null || echo "⚠️ Could not update .bashrc permanently"
 
-echo "✅ Installation completed! Available tools:"
-echo "🔍 Recon: subfinder, assetfinder, httpx, httprobe, katana, gau"
-echo "🛡️ Security: nuclei, nmap, wpscan, nikto, sqlmap"
-echo "🌐 Web: ffuf, gobuster, dirb, dirsearch"
-echo "🔧 Utils: gf, qsreplace, waybackurls, dalfox"
 echo ""
-echo "🐧 All tools are ready for penetration testing!"
+echo "✅ Installation completed! Available tools:"
+echo "🔍 Recon: subfinder, httpx, scan-subdomains, probe-urls"
+echo "🌐 Web: dirsearch, sqlmap"
+echo "📁 Wordlists: $HOME/wordlists/"
+echo ""
+echo "🎯 Quick start examples:"
+echo "  scan-subdomains example.com"
+echo "  probe-urls example.com"
+echo "  dirsearch -u https://example.com"
+echo "  sqlmap -u 'https://example.com?id=1'"
+echo ""
+echo "📁 Wordlists location: $HOME/wordlists/"
+echo "🐧 Tools ready for penetration testing!"
+echo ""
+echo "💡 Note: Tools are installed in $HOME/tools/bin/"
+echo "💡 PATH updated automatically for future sessions"

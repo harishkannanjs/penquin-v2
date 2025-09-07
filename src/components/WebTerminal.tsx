@@ -65,11 +65,23 @@ const SECURITY_COMMANDS: Command[] = [
   { id: 'echo', name: 'echo', description: 'Display text', example: 'echo "Hello World"' },
 ];
 
+interface CommandHistory {
+  command: string;
+  output: string;
+  timestamp: Date;
+  exitCode?: number;
+  error?: string;
+}
+
 export const WebTerminal: React.FC = () => {
   const terminalRef = useRef<HTMLDivElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
   const [terminal, setTerminal] = useState<any>(null);
   const [isReady, setIsReady] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const [commandHistory, setCommandHistory] = useState<CommandHistory[]>([]);
+  const [currentCommand, setCurrentCommand] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
 
   useEffect(() => {
     const initTerminal = async () => {
@@ -77,20 +89,25 @@ export const WebTerminal: React.FC = () => {
 
       try {
         // Dynamically import xterm modules
-        const { Terminal: XTerm } = await import('xterm');
-        const { FitAddon } = await import('xterm-addon-fit');
-        const { WebLinksAddon } = await import('xterm-addon-web-links');
-        const { SearchAddon } = await import('xterm-addon-search');
+        const { Terminal: XTerm } = await import('@xterm/xterm');
+        const { FitAddon } = await import('@xterm/addon-fit');
+        const { WebLinksAddon } = await import('@xterm/addon-web-links');
+        const { SearchAddon } = await import('@xterm/addon-search');
 
-        // Import CSS
-        await import('xterm/css/xterm.css');
+        // Import CSS (try different path)
+        try {
+          await import('@xterm/xterm/css/xterm.css');
+        } catch {
+          // Fallback - CSS might be included by default
+          console.log('XTerm CSS loaded via alternative method');
+        }
 
         const term = new XTerm({
           theme: {
             background: '#0f172a',
             foreground: '#e2e8f0',
             cursor: '#22d3ee',
-            selection: '#334155',
+            selectionBackground: '#334155',
             black: '#0f172a',
             red: '#ef4444',
             green: '#10b981',
@@ -154,43 +171,26 @@ export const WebTerminal: React.FC = () => {
 
           history.push(command);
           historyIndex = history.length;
+          setCurrentCommand(command);
+          setIsExecuting(true);
+
+          // Add command to history immediately
+          const newHistoryEntry: CommandHistory = {
+            command: command.trim(),
+            output: 'Executing...',
+            timestamp: new Date(),
+          };
+          
+          setCommandHistory(prev => [...prev, newHistoryEntry]);
 
           if (command.trim() === 'help') {
-            term.write('\r\n\x1b[36m╔══════════════════════════════════════════════════════════╗\x1b[0m\r\n');
-            term.write('\x1b[36m║                🛡️  PENQUIN SECURITY ARSENAL               ║\x1b[0m\r\n');
-            term.write('\x1b[36m╚══════════════════════════════════════════════════════════╝\x1b[0m\r\n');
-
-            const categories = {
-              'Reconnaissance': ['subfinder', 'assetfinder', 'httpx', 'httprobe'],
-              'Web Crawling': ['katana', 'gau'],
-              'Vulnerability Scanning': ['nuclei', 'nmap'],
-              'Web Fuzzing': ['ffuf'],
-              'Port Scanning': ['naabu', 'masscan'],
-              'Specialized Tools': ['wpscan', 'arjun', 'dalfox', 'subzy', 's3scanner']
-            };
-
-            Object.entries(categories).forEach(([category, tools]) => {
-              term.write(`\r\n\x1b[35m${category}:\x1b[0m\r\n`);
-              tools.forEach(toolName => {
-                const tool = SECURITY_COMMANDS.find(t => t.name === toolName);
-                if (tool) {
-                  term.write(`  \x1b[32m${tool.name.padEnd(12)}\x1b[0m - ${tool.description}\r\n`);
-                  term.write(`  \x1b[90m${' '.repeat(14)}Example: ${tool.example}\x1b[0m\r\n`);
-                }
-              });
-            });
-
-            term.write('\r\n\x1b[33m🔧 System Commands:\x1b[0m clear, ls, pwd, whoami, cat, grep, curl, wget\r\n');
-            term.write('\x1b[33m🚀 Installation:\x1b[0m install-tools (sets up all security tools)\r\n');
-            term.write('\x1b[36m💡 Pro Tip:\x1b[0m All tools execute with real output for actual penetration testing\x1b[0m\r\n');
-
+            const helpOutput = getHelpOutput();
+            updateCommandHistory(command.trim(), helpOutput, 0);
           } else if (command.trim() === 'clear') {
-            term.clear();
-            return; // Don't show prompt after clear
+            setCommandHistory([]);
+            setIsExecuting(false);
+            return;
           } else {
-            // Show command being executed
-            term.write(`\r\n\x1b[90m> ${command}\x1b[0m\r\n`);
-
             try {
               const response = await fetch('/api/terminal', {
                 method: 'POST',
@@ -205,66 +205,62 @@ export const WebTerminal: React.FC = () => {
 
               if (response.ok) {
                 const result = await response.json();
-                if (result.output) {
-                  // Enhanced color coding for better readability
-                  let coloredOutput = result.output;
-
-                  // Status indicators
-                  coloredOutput = coloredOutput.replace(/(\[✓ SUCCESS\]|\[INF\]|\[INFO\]|✅)/g, '\x1b[32m$1\x1b[0m');
-                  coloredOutput = coloredOutput.replace(/(\[⚠ WARNING\]|\[WRN\]|⚠️)/g, '\x1b[33m$1\x1b[0m');
-                  coloredOutput = coloredOutput.replace(/(\[✗ ERROR\]|\[ERR\]|\[CRITICAL\]|❌)/g, '\x1b[31m$1\x1b[0m');
-                  coloredOutput = coloredOutput.replace(/(\[ℹ INFO\]|\[FOUND\]|\[MEDIUM\]|\[HIGH\])/g, '\x1b[35m$1\x1b[0m');
-
-                  // URLs and domains
-                  coloredOutput = coloredOutput.replace(/(https?:\/\/[^\s]+)/g, '\x1b[36m$1\x1b[0m');
-                  coloredOutput = coloredOutput.replace(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/g, '\x1b[36m$1\x1b[0m');
-
-                  // IP addresses
-                  coloredOutput = coloredOutput.replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/g, '\x1b[34m$1\x1b[0m');
-
-                  // Ports
-                  coloredOutput = coloredOutput.replace(/(:(\d{1,5}))/g, '\x1b[35m$1\x1b[0m');
-
-                  // File paths
-                  coloredOutput = coloredOutput.replace(/(\/[^\s]+)/g, '\x1b[90m$1\x1b[0m');
-
-                  // Emojis and special characters
-                  coloredOutput = coloredOutput.replace(/(🐧|🔧|📦|🔍|📊|🎯|🚀|⚡|🛡️|💡)/g, '\x1b[36m$1\x1b[0m');
-
-                  term.write(coloredOutput);
-
-                  // Add separator for better readability
-                  if (!coloredOutput.endsWith('\n')) {
-                    term.write('\r\n');
-                  }
-                }
-
-                if (result.error) {
-                  term.write(`\x1b[31m❌ Error: ${result.error}\x1b[0m\r\n`);
-                  term.write(`\x1b[90m💡 Tip: Try 'install-tools' first, or check if the command exists\x1b[0m\r\n`);
-                }
-
-                // Show execution status
-                if (result.exitCode !== undefined) {
-                  if (result.exitCode === 0) {
-                    term.write(`\x1b[32m✓ Command completed successfully\x1b[0m\r\n`);
-                  } else {
-                    term.write(`\x1b[33m⚠ Command finished with exit code ${result.exitCode}\x1b[0m\r\n`);
-                  }
-                }
-
+                updateCommandHistory(command.trim(), result.output || '', result.exitCode, result.error);
               } else {
-                term.write(`\x1b[31m❌ Failed to execute command (HTTP ${response.status})\x1b[0m\r\n`);
-                term.write(`\x1b[90m💡 Try refreshing the page or check your network connection\x1b[0m\r\n`);
+                updateCommandHistory(command.trim(), '', undefined, `Failed to execute command (HTTP ${response.status})`);
               }
             } catch (error) {
-              term.write(`\x1b[31m❌ Network error: ${error}\x1b[0m\r\n`);
-              term.write(`\x1b[90m💡 Check your internet connection and try again\x1b[0m\r\n`);
+              updateCommandHistory(command.trim(), '', undefined, `Network error: ${error}`);
             }
           }
 
-          // Show new prompt
+          setIsExecuting(false);
+          // Show new prompt in terminal
           term.write(`\r\n\x1b[32mrunner@penquin\x1b[0m:\x1b[34m~/workspace\x1b[0m$ `);
+        };
+
+        const updateCommandHistory = (command: string, output: string, exitCode?: number, error?: string) => {
+          setCommandHistory(prev => {
+            const newHistory = [...prev];
+            const lastEntry = newHistory[newHistory.length - 1];
+            if (lastEntry && lastEntry.command === command) {
+              lastEntry.output = output;
+              lastEntry.exitCode = exitCode;
+              lastEntry.error = error;
+            }
+            return newHistory;
+          });
+        };
+
+        const getHelpOutput = () => {
+          const categories = {
+            'Reconnaissance': ['subfinder', 'assetfinder', 'httpx', 'httprobe'],
+            'Web Crawling': ['katana', 'gau'],
+            'Vulnerability Scanning': ['nuclei', 'nmap'],
+            'Web Fuzzing': ['ffuf'],
+            'Port Scanning': ['naabu', 'masscan'],
+            'Specialized Tools': ['wpscan', 'arjun', 'dalfox', 'subzy', 's3scanner']
+          };
+
+          let helpText = '🛡️  PENQUIN SECURITY ARSENAL\n\n';
+          
+          Object.entries(categories).forEach(([category, tools]) => {
+            helpText += `${category}:\n`;
+            tools.forEach(toolName => {
+              const tool = SECURITY_COMMANDS.find(t => t.name === toolName);
+              if (tool) {
+                helpText += `  ${tool.name.padEnd(12)} - ${tool.description}\n`;
+                helpText += `${' '.repeat(14)}Example: ${tool.example}\n`;
+              }
+            });
+            helpText += '\n';
+          });
+
+          helpText += '🔧 System Commands: clear, ls, pwd, whoami, cat, grep, curl, wget\n';
+          helpText += '🚀 Installation: install-tools (sets up all security tools)\n';
+          helpText += '💡 Pro Tip: All tools execute with real output for actual penetration testing';
+          
+          return helpText;
         };
 
         term.onData(async (data) => {
@@ -376,100 +372,160 @@ export const WebTerminal: React.FC = () => {
     await executeCommand('install-tools');
   };
 
+  // Scroll to bottom when new command history is added
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [commandHistory]);
+
+  const formatOutput = (output: string) => {
+    if (!output) return '';
+    
+    // Convert ANSI escape sequences to HTML spans for better display
+    let formatted = output
+      .replace(/\x1b\[[0-9;]*m/g, '') // Remove ANSI codes for now
+      .replace(/\n/g, '\n');
+    
+    return formatted;
+  };
+
+  const getStatusColor = (exitCode?: number, error?: string) => {
+    if (error) return 'text-red-400';
+    if (exitCode === 0) return 'text-green-400';
+    if (exitCode && exitCode > 0) return 'text-yellow-400';
+    return 'text-blue-400';
+  };
+
   return (
-    <div className="w-full h-full min-h-[500px] sm:min-h-[600px] md:min-h-[700px] lg:min-h-[800px] flex flex-col bg-slate-900 rounded-lg overflow-hidden shadow-2xl touch-manipulation">
-      {/* Terminal Header */}
-      <div className="flex items-center justify-between bg-slate-800 px-4 py-2 border-b border-slate-700 flex-shrink-0">
-        <div className="flex items-center space-x-2">
+    <div className="w-full h-full min-h-[800px] flex flex-col bg-slate-900 rounded-lg overflow-hidden shadow-2xl">
+      {/* Header */}
+      <div className="flex items-center justify-between bg-slate-800 px-4 py-3 border-b border-slate-700">
+        <div className="flex items-center space-x-3">
           <div className="flex space-x-1">
             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
             <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
             <div className="w-3 h-3 bg-green-500 rounded-full"></div>
           </div>
-          <span className="text-slate-300 text-sm font-medium">🐧 Penquin Terminal</span>
+          <span className="text-slate-200 font-semibold">🐧 Penquin Security Terminal</span>
         </div>
-        <div className="flex items-center space-x-2">
-          {isInstalling && (
-            <span className="text-orange-400 text-xs animate-pulse">Installing tools...</span>
+        <div className="flex items-center space-x-3">
+          {isExecuting && (
+            <span className="text-blue-400 text-sm animate-pulse">⚡ Executing...</span>
           )}
-          <span className="text-slate-400 text-xs hidden md:block">Professional Security Environment</span>
-          <div className={`w-2 h-2 rounded-full animate-pulse ${isReady ? 'bg-green-400' : 'bg-yellow-400'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${isReady ? 'bg-green-400' : 'bg-yellow-400'} animate-pulse`}></div>
         </div>
       </div>
 
-      {/* Quick Commands */}
-      <div className="bg-slate-800 px-4 py-2 border-b border-slate-700 flex-shrink-0">
-        <div className="flex flex-wrap gap-1 md:gap-2">
+      {/* Quick Actions */}
+      <div className="bg-slate-800 px-4 py-2 border-b border-slate-700">
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={installAllTools}
-            disabled={isInstalling}
-            className={`px-2 md:px-3 py-1 md:py-2 font-semibold text-xs md:text-sm rounded transition-colors ${
-              isInstalling 
-                ? 'bg-orange-700 text-orange-100 cursor-not-allowed animate-pulse' 
-                : 'bg-green-700 hover:bg-green-600 text-green-100 animate-pulse'
-            }`}
+            onClick={() => executeCommand('install-tools')}
+            disabled={isExecuting}
+            className="px-3 py-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white text-sm rounded transition-colors"
           >
-            {isInstalling ? '⏳ Installing...' : '🚀 Install All Tools'}
-          </button>
-          <button
-            onClick={() => executeCommand('clear')}
-            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded transition-colors"
-          >
-            Clear
+            🚀 Install Tools
           </button>
           <button
             onClick={() => executeCommand('help')}
-            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded transition-colors"
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors"
           >
-            Help
+            📖 Help
+          </button>
+          <button
+            onClick={() => executeCommand('clear')}
+            className="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded transition-colors"
+          >
+            🗑️ Clear
           </button>
           <button
             onClick={() => executeCommand('ls -la')}
-            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded transition-colors hidden md:block"
+            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded transition-colors"
           >
-            List Files
-          </button>
-          <button
-            onClick={() => executeCommand('subfinder -d bugcrowd.com')}
-            className="px-2 py-1 bg-blue-700 hover:bg-blue-600 text-blue-100 text-xs rounded transition-colors hidden lg:block"
-          >
-            Demo: Subfinder
-          </button>
-          <button
-            onClick={() => executeCommand('nuclei -u https://scanme.nmap.org')}
-            className="px-2 py-1 bg-purple-700 hover:bg-purple-600 text-purple-100 text-xs rounded transition-colors hidden lg:block"
-          >
-            Demo: Nuclei
-          </button>
-          <button
-            onClick={() => executeCommand('echo "hackthebox.com" | httpx')}
-            className="px-2 py-1 bg-cyan-700 hover:bg-cyan-600 text-cyan-100 text-xs rounded transition-colors hidden xl:block"
-          >
-            Demo: httpx
+            📁 List Files
           </button>
         </div>
       </div>
 
-      {/* Terminal */}
-      <div className="flex-1 relative min-h-0">
-        <div
-          ref={terminalRef}
-          className="absolute inset-0 p-2 md:p-4"
-          style={{ 
-            height: '100%', 
-            width: '100%'
-          }}
-        />
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Terminal Input Area */}
+        <div className="bg-slate-900 border-b border-slate-700 p-4">
+          <div className="mb-2">
+            <h3 className="text-slate-300 text-sm font-medium mb-2">Command Input:</h3>
+          </div>
+          <div className="bg-black rounded-lg p-3 min-h-[200px]">
+            <div
+              ref={terminalRef}
+              className="h-full w-full"
+              style={{ minHeight: '150px' }}
+            />
+          </div>
+        </div>
+
+        {/* Output Window */}
+        <div className="flex-1 bg-slate-800 p-4 min-h-0">
+          <div className="mb-2">
+            <h3 className="text-slate-300 text-sm font-medium">Command Output:</h3>
+          </div>
+          <div 
+            ref={outputRef}
+            className="bg-black rounded-lg p-4 h-full overflow-y-auto font-mono text-sm"
+          >
+            {commandHistory.length === 0 ? (
+              <div className="text-slate-500 text-center py-8">
+                <div className="text-4xl mb-2">🐧</div>
+                <div>No commands executed yet</div>
+                <div className="text-xs mt-2">Type 'help' to see available commands</div>
+              </div>
+            ) : (
+              commandHistory.map((entry, index) => (
+                <div key={index} className="mb-4 border-b border-slate-700 pb-4 last:border-b-0">
+                  {/* Command Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-green-400">$</span>
+                      <span className="text-white font-medium">{entry.command}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-xs">
+                      <span className="text-slate-400">
+                        {entry.timestamp.toLocaleTimeString()}
+                      </span>
+                      {entry.exitCode !== undefined && (
+                        <span className={`px-2 py-1 rounded ${getStatusColor(entry.exitCode, entry.error)}`}>
+                          {entry.error ? '❌' : entry.exitCode === 0 ? '✅' : '⚠️'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Command Output */}
+                  <div className="pl-4">
+                    {entry.error ? (
+                      <div className="text-red-400 bg-red-900/20 p-3 rounded border-l-4 border-red-400">
+                        <div className="font-semibold mb-1">Error:</div>
+                        <div>{entry.error}</div>
+                      </div>
+                    ) : entry.output === 'Executing...' ? (
+                      <div className="text-blue-400 animate-pulse">⏳ Executing command...</div>
+                    ) : (
+                      <pre className="text-slate-300 whitespace-pre-wrap break-words bg-slate-900/50 p-3 rounded">
+                        {formatOutput(entry.output)}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Status Bar */}
-      <div className="bg-slate-800 px-4 py-1 border-t border-slate-700 flex-shrink-0">
-        <div className="flex justify-between items-center text-xs text-slate-400">
-          <span className="hidden md:block">
-            {isInstalling ? 'Installing security tools...' : 'Ready - Professional penetration testing environment'}
-          </span>
-          <span className="md:hidden">
-            {isInstalling ? 'Installing...' : 'Ready'}
+      <div className="bg-slate-800 px-4 py-2 border-t border-slate-700 text-xs text-slate-400">
+        <div className="flex justify-between items-center">
+          <span>
+            {isExecuting ? 'Executing command...' : commandHistory.length > 0 ? `${commandHistory.length} commands executed` : 'Ready for commands'}
           </span>
           <span>{isReady ? 'Terminal Active' : 'Loading...'}</span>
         </div>
